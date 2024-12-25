@@ -1,0 +1,1 @@
+--model-name openai/whisper-large-v3 --language es --hf-token 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 --min-speakers 2 --max-speakers 2 --device-id 0  --batch-size 8 --diarization_model pyannote/speaker-diarization-3.1 --file-name="c:\workspace\@recordings\20241207 Libro con Sofi\GMT20241207-150043_Recording.m4a"
