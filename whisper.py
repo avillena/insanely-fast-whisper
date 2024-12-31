@@ -4,16 +4,27 @@ from transformers import pipeline
 from rich.progress import Progress, TimeElapsedColumn, BarColumn, TextColumn
 import torch
 
+# Add the `src` directory to PYTHONPATH
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 from insanely_fast_whisper.utils.diarization_pipeline import diarize
 from insanely_fast_whisper.utils.result import build_result
 
-def main():
+# Suppress specific warnings and configure logging level
+import warnings
+import logging
+warnings.filterwarnings("ignore")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("rich").setLevel(logging.ERROR)
+logging.basicConfig(level=logging.ERROR)
+
+def parse_arguments():
     parser = argparse.ArgumentParser(description="Automatic Speech Recognition")
     parser.add_argument(
-        "--file-name",
-        required=True,
+        "file_name",
         type=str,
-        help="Path or URL to the audio file to be transcribed.",
+        help="Path or URL to the audio file to be transcribed."
     )
     parser.add_argument(
         "--device-id",
@@ -100,6 +111,10 @@ def main():
     # Validar argumentos de speakers
     if args.num_speakers is not None and (args.min_speakers is not None or args.max_speakers is not None):
         parser.error("--num-speakers cannot be used together with --min-speakers or --max-speakers")
+    return args
+
+if __name__ == "__main__":
+    args = parse_arguments()
 
     # Configurar el pipeline
     pipe = pipeline(
@@ -138,7 +153,7 @@ def main():
             json.dump(result, fp, ensure_ascii=False)
 
         print(
-            f"¡Voila!✨ Tu archivo ha sido transcrito y segmentado por hablantes. Revísalo aquí 👉 {args.transcript_path}"
+            f"Voila!✨ Your file has been transcribed & speaker segmented go check it out over here 👉 {args.transcript_path}"
         )
     else:
         with open(args.transcript_path, "w", encoding="utf8") as fp:
@@ -146,8 +161,5 @@ def main():
             json.dump(result, fp, ensure_ascii=False)
 
         print(
-            f"¡Voila!✨ Tu archivo ha sido transcrito. Revísalo aquí 👉 {args.transcript_path}"
+            f"Voila!✨ Your file has been transcribed go check it out over here 👉 {args.transcript_path}"
         )
-
-if __name__ == "__main__":
-    main()
