@@ -136,7 +136,7 @@ if __name__ == "__main__":
         BarColumn(style="yellow1", pulse_style="white"),
         TimeElapsedColumn(),
     ) as progress:
-        progress.add_task("[yellow]Transcribiendo...", total=None)
+        progress.add_task("[yellow]Transcribing...", total=None)
 
         outputs = pipe(
             args.file_name,
