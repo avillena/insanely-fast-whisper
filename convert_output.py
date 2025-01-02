@@ -1,167 +1,93 @@
 import argparse
-import json
+import sys
+from pathlib import Path
+from formatters import OutputFormat, convert_output, output_format_type
+from typing import Callable
 import os
 
+# Reemplazar el validador de archivos JSON con una función que solo verifique la extensión y los permisos
+def json_file_validator(file_path: str) -> Path:
+    """Create a validator for JSON files"""
+    path = Path(file_path)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(f"Invalid file: {file_path}")
+    if path.suffix.lower() != ".json":
+        raise argparse.ArgumentTypeError(f"Invalid JSON file: {file_path}")
+    if not os.access(path, os.R_OK):
+        raise argparse.ArgumentTypeError(f"File is not readable: {file_path}")
+    return path
 
-class TxtFormatter:
-    def __init__(self, speaker_names=None):
-        self.speaker_names = speaker_names.split(',') if speaker_names else None
-        self.speaker_map = {}
-        if self.speaker_names:
-            # Crear un mapeo de SPEAKER_00, SPEAKER_01, etc. a los nombres reales
-            self.speaker_map = {f"SPEAKER_{i:02}": name.upper().strip() 
-                                for i, name in enumerate(self.speaker_names)}
-
-    def preamble(self):
-        return ""
-
-    def format_chunk(self, chunk, index):
-        text = chunk.get('text', '').strip()
-        speaker = chunk.get('speaker', None)
-        
-        if speaker and self.speaker_names:
-            speaker_name = self.speaker_map.get(speaker, speaker)
-            return f"{speaker_name}: {text}\n"
-        return f"{text}\n"
-
-
-class SrtFormatter:
-    def __init__(self, speaker_names=None):
-        self.speaker_names = speaker_names.split(',') if speaker_names else None
-        self.speaker_map = {}
-        if self.speaker_names:
-            self.speaker_map = {f"SPEAKER_{i:02}": name.upper().strip() 
-                                for i, name in enumerate(self.speaker_names)}
-
-    def preamble(self):
-        return ""
-
-    def format_seconds(self, seconds):
-        whole_seconds = int(seconds)
-        milliseconds = int((seconds - whole_seconds) * 1000)
-
-        hours = whole_seconds // 3600
-        minutes = (whole_seconds % 3600) // 60
-        seconds = whole_seconds % 60
-
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
-
-    def format_chunk(self, chunk, index):
-        text = chunk.get('text', '').strip()
-        speaker = chunk.get('speaker', None)
-        start, end = chunk['timestamp'][0], chunk['timestamp'][1]
-        start_format, end_format = self.format_seconds(start), self.format_seconds(end)
-        
-        if speaker and self.speaker_names:
-            speaker_name = self.speaker_map.get(speaker, speaker)
-            text = f"{speaker_name}: {text}"
-                
-        return f"{index}\n{start_format} --> {end_format}\n{text}\n\n"
-
-
-class VttFormatter:
-    def __init__(self, speaker_names=None):
-        self.speaker_names = speaker_names.split(',') if speaker_names else None
-        self.speaker_map = {}
-        if self.speaker_names:
-            self.speaker_map = {f"SPEAKER_{i:02}": name.upper().strip() 
-                                for i, name in enumerate(self.speaker_names)}
-
-    def preamble(self):
-        return "WEBVTT\n\n"
-
-    def format_seconds(self, seconds):
-        whole_seconds = int(seconds)
-        milliseconds = int((seconds - whole_seconds) * 1000)
-
-        hours = whole_seconds // 3600
-        minutes = (whole_seconds % 3600) // 60
-        seconds = whole_seconds % 60
-
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
-
-    def format_chunk(self, chunk, index):
-        text = chunk.get('text', '').strip()
-        speaker = chunk.get('speaker', None)
-        start, end = chunk['timestamp'][0], chunk['timestamp'][1]
-        start_format, end_format = self.format_seconds(start), self.format_seconds(end)
-        
-        if speaker and self.speaker_names:
-            speaker_name = self.speaker_map.get(speaker, speaker)
-            text = f"{speaker_name}: {text}"
-                
-        return f"{index}\n{start_format} --> {end_format}\n{text}\n\n"
-
-
-def convert(input_path, output_format, output_dir, verbose, speaker_names=None):
-    # Leer el archivo JSON con codificación UTF-8
-    with open(input_path, 'r', encoding='utf-8') as file:
-        data = json.load(file)
-
-    formatter_class = {
-        'srt': SrtFormatter,
-        'vtt': VttFormatter,
-        'txt': TxtFormatter
-    }.get(output_format)
-
-    formatter = formatter_class(speaker_names)
-    string = formatter.preamble()
-    
-    # Usar la lista de speakers directamente del JSON
-    chunks = data.get('speakers', [])
-
-    for index, chunk in enumerate(chunks, 1):
-        entry = formatter.format_chunk(chunk, index)
-        if verbose:
-            print(entry)
-        string += entry
-
-    # Escribir el archivo con codificación UTF-8
-    output_file = os.path.join(output_dir, f"output.{output_format}")
-    with open(output_file, 'w', encoding='utf-8') as file:
-        file.write(string)
-
-    if verbose:
-        print(f"\nArchivo guardado en: {output_file}")
-        if speaker_names:
-            print(f"Nombres de speakers utilizados: {speaker_names}")
-            print(f"Mapeo de speakers: {formatter.speaker_map}")
-
+# Reemplazar el validador de directorio escribible con una función que verifique si el directorio es escribible
+def writable_dir_validator(dir_path: str) -> Path:
+    """Check if the directory is writable"""
+    path = Path(dir_path)
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"Invalid directory: {dir_path}")
+    if not os.access(path, os.W_OK):
+        raise argparse.ArgumentTypeError(f"Directory is not writable: {dir_path}")
+    return path
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert JSON to an output format.")
-    parser.add_argument("input_file", help="Input JSON file path")
-    parser.add_argument("-f", "--output_format", default="txt", 
-                       help="Format of the output file (default: txt)", 
-                       choices=["txt", "srt", "vtt"])
-    parser.add_argument("-o", "--output_dir", default=".", 
-                       help="Directory where the output file/s is/are saved")
-    parser.add_argument("--verbose", action="store_true", 
-                       help="Print each entry as it's added")
-    parser.add_argument("--speakers", type=str, 
-                       help="Comma-separated list of speaker names (e.g., 'Agustin,Sofia')")
+    """Main function to handle command line arguments and conversion"""
+    parser = argparse.ArgumentParser(
+        description="Convert JSON transcription to specified format."
+    )
+    
+    parser.add_argument(
+        "file_name",
+        type=json_file_validator,
+        help="Path to the input JSON file to be converted.",
+    )
+    
+    output_format_choices = [fmt.value for fmt in OutputFormat]
+    parser.add_argument(
+        "--output-format", "-out",
+        type=str,
+        default=OutputFormat.SRT.value,
+        choices=output_format_choices,
+        help=f"Output format for the transcription file ({', '.join(output_format_choices)})."
+    )
+    
+    parser.add_argument(
+        "--transcript-folder", "-f",
+        type=writable_dir_validator,
+        help="Folder to save the transcription output. Defaults to input file's directory."
+    )
+    
+    parser.add_argument(
+        "--speaker-names", "-sn",
+        type=str,
+        help="Comma-separated list of speaker names (e.g., 'Agustin,Sofia')."
+    )
 
     args = parser.parse_args()
     
-    # Validar que el archivo de entrada existe
-    if not os.path.exists(args.input_file):
-        print(f"Error: El archivo {args.input_file} no existe.")
-        return
+    # Si no se especifica la carpeta de salida, usar el directorio del archivo de entrada
+    if args.transcript_folder is None:
+        args.transcript_folder = args.file_name.parent
 
-    # Validar que el directorio de salida existe
-    if not os.path.exists(args.output_dir):
-        print(f"Creando directorio de salida: {args.output_dir}")
-        os.makedirs(args.output_dir)
+    # Imprimir el mapeo de los hablantes si se proporciona --speaker-names
+    if args.speaker_names:
+        speaker_names = args.speaker_names.split(',')
+        speaker_map = {f"SPEAKER_{i:02}": name.upper().strip() for i, name in enumerate(speaker_names)}
+        print("Speaker mapping:")
+        for speaker_id, speaker_name in speaker_map.items():
+            print(f"{speaker_id}: {speaker_name}")
 
     try:
-        convert(args.input_file, args.output_format, args.output_dir, 
-               args.verbose, args.speakers)
+        output_format = OutputFormat(args.output_format.lower())
+        convert_output(
+            input_path=args.file_name,
+            output_format=output_format, 
+            output_dir=args.transcript_folder,
+            speaker_names=args.speaker_names
+        )
     except Exception as e:
-        print(f"Error al procesar el archivo: {str(e)}")
+        print(f"Error processing file: {str(e)}", file=sys.stderr)
         if args.verbose:
             import traceback
             traceback.print_exc()
-
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
