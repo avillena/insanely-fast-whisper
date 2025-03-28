@@ -163,3 +163,8 @@ cython_debug/
 
 .vscode/
 .idea/
+*.wav
+*.mp4
+*.srt
+*.json
+whisper_obeya.cmd
