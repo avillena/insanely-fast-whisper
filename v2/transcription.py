@@ -31,12 +31,22 @@ def transcribe_audio(
     transformers = dynamic_imports["transformers"]
     
     # Configurar el pipeline de ASR
+    model_kwargs = {}
+    
+    # Configurar el tipo de atención
+    if config.attn_type == "sdpa":
+        model_kwargs["attn_implementation"] = "sdpa"
+    elif config.attn_type == "eager":
+        model_kwargs["attn_implementation"] = "eager" 
+    elif config.attn_type == "flash":
+        model_kwargs["attn_implementation"] = "flash_attention_2"
+    
     pipe = transformers.pipeline(
         "automatic-speech-recognition",
         model=config.model_name,
         torch_dtype=torch.float16,
         device="cuda:" + config.device_id if config.device_id != "mps" else "mps",
-        model_kwargs={"attn_implementation": "sdpa"},
+        model_kwargs=model_kwargs,
     )
     
     # Parámetros de generación
@@ -54,7 +64,7 @@ def transcribe_audio(
         
         return pipe(
             audio_dict,
-            chunk_length_s=30,
+            chunk_length_s=config.chunk_length,
             batch_size=config.batch_size,
             generate_kwargs=generate_kwargs,
             return_timestamps=True,

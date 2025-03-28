@@ -50,8 +50,13 @@ class TranscriptionConfig:
     task: TaskType = "transcribe"
     language: str = "es"
     batch_size: int = 8
+    output_format: str = "json"
+    chunk_length: int = 30
+    attn_type: str = "sdpa"
     hf_token: str = "no_token"
     diarization_model: str = "pyannote/speaker-diarization-3.1"
+    diarize: bool = False
+    speaker_names: Optional[str] = None
     num_speakers: Optional[int] = None
     min_speakers: Optional[int] = None
     max_speakers: Optional[int] = None

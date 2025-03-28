@@ -6,12 +6,28 @@ import logging
 import functools
 import importlib
 from typing import Dict, Any, Callable
+from rich.logging import RichHandler
+from rich.console import Console
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn
 
-# Configuración de logging con formato compacto
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s-%(name)s-%(levelname)s - %(message)s',
-                    datefmt='%y%m%d.%H%M%S')
+# Configurar consola
+console = Console()
+
+# Configuración de logging con Rich
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[
+        RichHandler(
+            console=console,
+            rich_tracebacks=True,
+            show_time=True,
+            show_path=False,
+            enable_link_path=False
+        )
+    ]
+)
 logger = logging.getLogger("transcriber")
 
 # Utilidad para importación dinámica
