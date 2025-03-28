@@ -5,7 +5,7 @@ Usa tipado estático específico y decoradores para importaciones dinámicas.
 from __future__ import annotations
 import os
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-
+os.environ["PYTHONWARNINGS"] = "ignore::UserWarning"
 import time
 import logging
 import functools
@@ -403,7 +403,7 @@ def load_diarization_pipeline(
         Pipeline: Pipeline de diarización cargado
     """
     torch = dynamic_imports["torch"]
-    pyannote_audio = dynamic_imports["pyannote.audio"]
+    pyannote_audio = dynamic_imports["audio"]
     
     pipeline = pyannote_audio.Pipeline.from_pretrained(
         checkpoint_path=config.diarization_model,
@@ -550,7 +550,7 @@ def diarize_audio(
         # 1. Cargar pipeline
         diarization_pipeline = load_diarization_pipeline(
             config, dynamic_imports={"torch": dynamic_imports["torch"], 
-                                    "pyannote.audio": dynamic_imports["pyannote.audio"]}
+                                    "pyannote.audio": dynamic_imports["audio"]}
         )
         
         # 2. Ejecutar diarización
