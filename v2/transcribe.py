@@ -37,6 +37,11 @@ from transcription import transcribe_audio
 from diarization import diarize_audio
 from formatters import OutputFormat, convert_output, output_format_type
 
+"""
+Modificación a la función parse_arguments() en transcribe.py para cambiar
+la lógica de la ruta de salida predeterminada.
+"""
+
 @log_time
 def parse_arguments() -> TranscriptionConfig:
     """
@@ -82,8 +87,8 @@ Ejemplos de uso:
         "-o", "--output",
         dest="transcript_path",
         type=str,
-        default="output.json",
-        help="Ruta para guardar el resultado (predeterminado: output.json)"
+        default=None,  # Cambiado de "output.json" a None para manejar dinámicamente
+        help="Ruta para guardar el resultado (predeterminado: [nombre_input]-transcribe.[formato])"
     )
     
     basic_group.add_argument(
@@ -94,6 +99,9 @@ Ejemplos de uso:
         default="json",
         help="Formato del archivo de salida (predeterminado: json)"
     )
+    
+    # El resto del código del parser sigue igual
+    # ...
     
     # Opciones de transcripción
     transc_group.add_argument(
@@ -207,6 +215,28 @@ Ejemplos de uso:
     
     if args.diarize and args.hf_token == "no_token":
         parser.error("La opción --diarize requiere un token de HuggingFace (--token)")
+    
+    # NUEVO: Calcular la ruta de salida predeterminada si no se especificó
+    if args.transcript_path is None:
+        # Obtener la ruta completa del archivo de entrada
+        input_path = Path(args.file_name)
+        
+        # Si es una URL, usar solo el nombre del archivo
+        if args.file_name.startswith(("http://", "https://")):
+            import urllib.parse
+            file_name = urllib.parse.urlparse(args.file_name).path.split("/")[-1]
+            input_path = Path(file_name)
+        
+        # Obtener el directorio y el nombre base del archivo de entrada
+        input_dir = input_path.parent
+        input_stem = input_path.stem
+        
+        # Generar el nombre del archivo de salida
+        output_name = f"{input_stem}-transcribe.{args.output_format}"
+        
+        # Combinar con el directorio para obtener la ruta completa
+        args.transcript_path = str(input_dir / output_name)
+        logger.info(f"Ruta de salida predeterminada: [bold cyan]{args.transcript_path}[/]")
     
     # Ajustar la extensión del archivo de salida según el formato
     if args.output_format != "json":

@@ -1,11 +1,12 @@
 """
 Módulo para convertir transcripciones a diferentes formatos.
+Versión optimizada para eliminar duplicación de código.
 """
 import json
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any, Callable
+from typing import Dict, List, Optional, Union, Any, Callable, Tuple
 
 from helpers import logger
 
@@ -23,77 +24,116 @@ def output_format_type(value: str) -> OutputFormat:
     except ValueError:
         raise ValueError(f"Formato no soportado: {value}")
 
-def format_timestamp_srt(seconds: float) -> str:
-    """Formatea segundos a formato SRT timestamp."""
+def format_timestamp(seconds: float, format_type: str = "srt") -> str:
+    """
+    Formatea segundos a formato de timestamp.
+    
+    Args:
+        seconds: Tiempo en segundos
+        format_type: Tipo de formato ("srt" o "vtt")
+        
+    Returns:
+        str: Timestamp formateado
+    """
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
     millisecs = int((seconds % 1) * 1000)
-    return f"{hours:02}:{minutes:02}:{secs:02},{millisecs:03}"
+    
+    if format_type == "vtt":
+        return f"{hours:02}:{minutes:02}:{secs:02}.{millisecs:03}"
+    else:  # srt por defecto
+        return f"{hours:02}:{minutes:02}:{secs:02},{millisecs:03}"
 
-def format_timestamp_vtt(seconds: float) -> str:
-    """Formatea segundos a formato VTT timestamp."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millisecs = int((seconds % 1) * 1000)
-    return f"{hours:02}:{minutes:02}:{secs:02}.{millisecs:03}"
+def get_speaker_display(segment: Dict[str, Any], speaker_names: Optional[Dict[str, str]]) -> Optional[str]:
+    """
+    Obtiene el nombre de visualización del hablante.
+    
+    Args:
+        segment: Segmento de transcripción
+        speaker_names: Mapeo de ID de hablante a nombre personalizado
+        
+    Returns:
+        Optional[str]: Nombre de visualización del hablante o None si no hay información
+    """
+    if 'speaker' not in segment:
+        return None
+        
+    speaker_id = segment['speaker']
+    if speaker_names:
+        return speaker_names.get(speaker_id, speaker_id)
+    return speaker_id
+
+def get_segments_from_data(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Extrae los segmentos de la transcripción.
+    
+    Args:
+        data: Datos de transcripción
+        
+    Returns:
+        List[Dict[str, Any]]: Lista de segmentos
+    """
+    # Usar 'speakers' si está disponible, de lo contrario 'chunks'
+    return data.get('speakers', data.get('chunks', []))
+
+def format_subtitle_content(
+    segments: List[Dict[str, Any]],
+    speaker_names: Optional[Dict[str, str]],
+    format_type: str
+) -> str:
+    """
+    Formatea una lista de segmentos en formato de subtítulos.
+    
+    Args:
+        segments: Lista de segmentos de transcripción
+        speaker_names: Mapeo de ID de hablante a nombre personalizado
+        format_type: Tipo de formato ("srt" o "vtt")
+        
+    Returns:
+        str: Contenido formateado
+    """
+    result = []
+    # Añadir encabezado VTT si es necesario
+    if format_type == "vtt":
+        result.append("WEBVTT\n")
+    
+    index = 1
+    
+    for segment in segments:
+        # Obtener timestamps del segmento
+        start_time, end_time = segment['timestamp']
+        if start_time is None or end_time is None:
+            continue
+            
+        # Formatear texto con nombre del hablante si está disponible
+        text = segment['text'].strip()
+        speaker_display = get_speaker_display(segment, speaker_names)
+        if speaker_display:
+            text = f"{speaker_display}: {text}"
+        
+        # Formatear timestamps
+        start_timestamp = format_timestamp(start_time, format_type)
+        end_timestamp = format_timestamp(end_time, format_type)
+        
+        # Añadir entrada según formato
+        if format_type == "vtt":
+            result.append(f"\n{start_timestamp} --> {end_timestamp}\n{text}")
+        else:  # srt
+            result.append(f"{index}\n{start_timestamp} --> {end_timestamp}\n{text}\n")
+            index += 1
+    
+    return "\n".join(result)
 
 def convert_to_srt(data: Dict[str, Any], speaker_names: Optional[Dict[str, str]] = None) -> str:
     """Convertir datos de transcripción a formato SRT."""
-    result = []
-    index = 1
-
-    # Determinar qué lista usar - con hablantes si está disponible, de lo contrario chunks
-    segments = data.get('speakers', data.get('chunks', []))
-    
-    for i, segment in enumerate(segments):
-        # Obtener timestamps del segmento
-        start_time, end_time = segment['timestamp']
-        if start_time is None or end_time is None:
-            continue
-            
-        # Formatear texto con nombre del hablante si está disponible
-        text = segment['text'].strip()
-        if 'speaker' in segment and speaker_names:
-            speaker_id = segment['speaker']
-            speaker_name = speaker_names.get(speaker_id, speaker_id)
-            text = f"{speaker_name}: {text}"
-        
-        # Formatear entrada SRT
-        start_timestamp = format_timestamp_srt(start_time)
-        end_timestamp = format_timestamp_srt(end_time)
-        result.append(f"{index}\n{start_timestamp} --> {end_timestamp}\n{text}\n")
-        index += 1
-    
-    return "\n".join(result)
+    segments = get_segments_from_data(data)
+    return format_subtitle_content(segments, speaker_names, "srt")
 
 def convert_to_vtt(data: Dict[str, Any], speaker_names: Optional[Dict[str, str]] = None) -> str:
     """Convertir datos de transcripción a formato VTT."""
-    result = ["WEBVTT\n"]
-    
-    # Determinar qué lista usar - con hablantes si está disponible, de lo contrario chunks
-    segments = data.get('speakers', data.get('chunks', []))
-    
-    for i, segment in enumerate(segments):
-        # Obtener timestamps del segmento
-        start_time, end_time = segment['timestamp']
-        if start_time is None or end_time is None:
-            continue
-            
-        # Formatear texto con nombre del hablante si está disponible
-        text = segment['text'].strip()
-        if 'speaker' in segment and speaker_names:
-            speaker_id = segment['speaker']
-            speaker_name = speaker_names.get(speaker_id, speaker_id)
-            text = f"{speaker_name}: {text}"
-        
-        # Formatear entrada VTT
-        start_timestamp = format_timestamp_vtt(start_time)
-        end_timestamp = format_timestamp_vtt(end_time)
-        result.append(f"\n{start_timestamp} --> {end_timestamp}\n{text}")
-    
-    return "\n".join(result)
+    segments = get_segments_from_data(data)
+    return format_subtitle_content(segments, speaker_names, "vtt")
 
 def convert_to_txt(data: Dict[str, Any], speaker_names: Optional[Dict[str, str]] = None) -> str:
     """Convertir datos de transcripción a formato de texto plano."""
@@ -108,11 +148,9 @@ def convert_to_txt(data: Dict[str, Any], speaker_names: Optional[Dict[str, str]]
         
         for segment in segments:
             speaker_id = segment['speaker']
-            speaker_name = speaker_names.get(speaker_id, speaker_id) if speaker_names else speaker_id
-            
             # Si cambia el hablante, agregar el texto acumulado y reiniciar
             if current_speaker is not None and current_speaker != speaker_id:
-                speaker_display = speaker_names.get(current_speaker, current_speaker) if speaker_names else current_speaker
+                speaker_display = get_speaker_display({'speaker': current_speaker}, speaker_names)
                 result.append(f"{speaker_display}: {' '.join(current_text)}")
                 current_text = []
             
@@ -121,7 +159,7 @@ def convert_to_txt(data: Dict[str, Any], speaker_names: Optional[Dict[str, str]]
         
         # Agregar el último segmento
         if current_speaker and current_text:
-            speaker_display = speaker_names.get(current_speaker, current_speaker) if speaker_names else current_speaker
+            speaker_display = get_speaker_display({'speaker': current_speaker}, speaker_names)
             result.append(f"{speaker_display}: {' '.join(current_text)}")
     
     # Si no hay información de hablantes o está vacía, usar el texto completo
