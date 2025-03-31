@@ -12,6 +12,7 @@ import time
 import logging
 import warnings
 from pathlib import Path
+from datetime import datetime
 from typing import Any, List, Union, cast
 
 # Configuración del entorno
@@ -29,18 +30,13 @@ logging.getLogger("speechbrain.utils.quirks").setLevel(logging.WARNING)
 # Importaciones locales
 from data_types import (
     TranscriptionConfig, TaskType, FinalResult, 
-    TranscriptOutput, DiarizedChunk
+    TranscriptOutput, DiarizedChunk, ProcessingMetadata
 )
-from helpers import log_time, logger
+from helpers import log_time, logger, format_path
 from audio import process_audio
 from transcription import transcribe_audio
 from diarization import diarize_audio
 from formatters import OutputFormat, convert_output, output_format_type
-
-"""
-Modificación a la función parse_arguments() en transcribe.py para cambiar
-la lógica de la ruta de salida predeterminada.
-"""
 
 @log_time
 def parse_arguments() -> TranscriptionConfig:
@@ -99,9 +95,6 @@ Ejemplos de uso:
         default="json",
         help="Formato del archivo de salida (predeterminado: json)"
     )
-    
-    # El resto del código del parser sigue igual
-    # ...
     
     # Opciones de transcripción
     transc_group.add_argument(
@@ -236,7 +229,7 @@ Ejemplos de uso:
         
         # Combinar con el directorio para obtener la ruta completa
         args.transcript_path = str(input_dir / output_name)
-        logger.info(f"Ruta de salida predeterminada: [bold cyan]{args.transcript_path}[/]")
+        logger.info(f"Ruta de salida predeterminada: {format_path(args.transcript_path)}")
     
     # Ajustar la extensión del archivo de salida según el formato
     if args.output_format != "json":
@@ -271,7 +264,8 @@ Ejemplos de uso:
 def build_and_save_result(
     config: TranscriptionConfig, 
     transcript: TranscriptOutput, 
-    speakers_transcript: List[DiarizedChunk]
+    speakers_transcript: List[DiarizedChunk],
+    audio_data: Any
 ) -> FinalResult:
     """
     Construye y guarda el resultado final en formato JSON y lo convierte al formato solicitado.
@@ -280,23 +274,70 @@ def build_and_save_result(
         config: Configuración de transcripción
         transcript: Resultados de la transcripción
         speakers_transcript: Transcripción con info de hablantes
+        audio_data: Datos de audio procesados
         
     Returns:
         FinalResult: Resultado final con toda la información
     """
     # Construir resultado final
     logger.info("Construyendo resultado final")
+    
+    # Crear metadatos de procesamiento
+    processing_meta: ProcessingMetadata = {
+        "transcription_model": config.model_name,
+        "language": config.language,
+        "device": "mps" if config.device_id == "mps" else "cpu" if config.device_id == "cpu" else f"cuda:{config.device_id}",
+        "timestamp": datetime.now().isoformat(),
+        "diarization": config.diarize,
+        "diarization_model": config.diarization_model if config.diarize else None
+    }
+    
+    # Incluir metadatos completos
+    metadata = {
+        "source": audio_data.get("source_info", {}),
+        "processing": processing_meta
+    }
+    
     result: FinalResult = {
         "speakers": speakers_transcript,
         "chunks": transcript["chunks"],
         "text": transcript["text"],
+        "metadata": metadata
     }
     
     # Guardar resultado en JSON primero (siempre necesario para la conversión)
     json_output_path = Path(str(config.transcript_path).replace(f".{config.output_format}", ".json")) \
         if config.output_format != "json" else Path(config.transcript_path)
     
-    logger.info(f"Guardando resultado JSON en: [bold cyan]{json_output_path}[/]")
+    logger.info(f"Guardando resultado JSON en: {format_path(str(json_output_path))}")
+    
+    # Mostrar información de origen si está disponible
+    if "source" in metadata and metadata["source"].get("path"):
+        logger.info("Información de origen incluida en metadatos:")
+        logger.info(f"- Archivo: {format_path(metadata['source']['path'])}")
+        
+        format_info = []
+        if metadata["source"].get("is_video"):
+            format_info.append("video")
+        elif metadata["source"].get("type") == "url":
+            format_info.append("remoto")
+        else:
+            format_info.append("audio")
+            
+        if metadata["source"].get("format"):
+            format_info.append(f"formato: {metadata['source']['format']}")
+            
+        logger.info(f"- Tipo: {', '.join(format_info)}")
+        
+        if metadata["source"].get("duration_seconds"):
+            duration = metadata["source"]["duration_seconds"]
+            duration_str = f"{int(duration//60)}m {int(duration%60)}s"
+            logger.info(f"- Duración: {duration_str}")
+            
+        if metadata["source"].get("sampling_rate"):
+            logger.info(f"- Muestras: {metadata['source'].get('numpy_array', {}).shape[0] if 'numpy_array' in metadata['source'] else 'N/A'} a {metadata['source']['sampling_rate']}Hz")
+    
+    # Guardar el JSON
     with open(json_output_path, "w", encoding="utf8") as fp:
         json.dump(result, fp, ensure_ascii=False, indent=2)
     
@@ -311,16 +352,15 @@ def build_and_save_result(
                 speaker_names=config.speaker_names
             )
             
-            # Si el formato de salida no es JSON, eliminar el archivo JSON temporal 
-            # solo si el archivo de salida es diferente
-            if str(config.transcript_path) != str(json_output_path):
-                os.remove(json_output_path)
-                logger.info(f"Archivo JSON temporal eliminado: [bold cyan]{json_output_path}[/]")
+            # No eliminar el archivo JSON
+            logger.info(f"[green]¡Voila!✨[/] Ambos archivos guardados:")
+            logger.info(f"- JSON: {format_path(str(json_output_path))}")
+            logger.info(f"- {config.output_format.upper()}:  {format_path(str(config.transcript_path))}")
         except Exception as e:
-            logger.error(f"[bold red]Error al convertir formato[/]: {str(e)}")
-            logger.info(f"Se mantiene el resultado en formato JSON: [bold cyan]{json_output_path}[/]")
+            logger.error(f"[red]Error al convertir formato[/]: {str(e)}")
+            logger.info(f"Se mantiene el resultado en formato JSON: {format_path(str(json_output_path))}")
     else:
-        logger.info(f"[bold green]¡Voila!✨[/] Archivo guardado en: [bold cyan]{json_output_path}[/]")
+        logger.info(f"[green]¡Voila!✨[/] Archivo guardado en: {format_path(str(json_output_path))}")
     
     return result
 
@@ -348,11 +388,11 @@ def main() -> FinalResult:
             speakers_transcript = diarize_audio(config, audio_data, transcript)
         
         # 5. Construir y guardar resultado
-        result = build_and_save_result(config, transcript, speakers_transcript)
+        result = build_and_save_result(config, transcript, speakers_transcript, audio_data)
         
         return result
     except Exception as e:
-        logger.error(f"[bold red]Error durante la ejecución:[/] {str(e)}")
+        logger.error(f"[red]Error durante la ejecución:[/] {str(e)}")
         logger.debug("Detalles del error:", exc_info=True)
         sys.exit(1)
 

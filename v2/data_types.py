@@ -9,11 +9,29 @@ from pathlib import Path
 # Tipos específicos para datos
 TaskType = Literal["transcribe", "translate"]
 
+class AudioSourceInfo(TypedDict):
+    """Información sobre el origen del audio procesado."""
+    path: Optional[str]  # Ruta o URL original
+    type: str  # "file", "url", "bytes" o "dict"
+    file_name: Optional[str]  # Nombre del archivo si existe
+    format: str  # Formato de archivo (mp3, wav, mp4, etc.)
+    is_video: bool  # Si el origen es un archivo de video
+    duration_seconds: Optional[float]  # Duración en segundos
+    content_size: Optional[int]  # Tamaño en bytes si está disponible
+
 class AudioData(TypedDict):
     """Datos de audio procesados y listos para transcripción/diarización."""
     numpy_array: "np.ndarray"  # Array de audio mono de 16kHz
     torch_tensor: "torch.Tensor"  # Tensor para diarización
     sampling_rate: int  # Siempre 16000Hz
+    source_info: AudioSourceInfo  # Información del origen
+
+class AudioInputDict(TypedDict):
+    """Diccionario de entrada de audio con metadatos."""
+    raw: Optional["np.ndarray"]  # Datos de audio crudos
+    array: Optional["np.ndarray"]  # Alternativa a raw
+    sampling_rate: int  # Frecuencia de muestreo
+    path: Optional[str]  # Origen del audio (si está disponible)
 
 class TranscriptChunk(TypedDict):
     """Fragmento individual de transcripción con timestamp."""
@@ -34,11 +52,21 @@ class DiarizedChunk(TranscriptChunk):
     """Fragmento de transcripción con información de hablante."""
     speaker: str  # Identificador del hablante
 
+class ProcessingMetadata(TypedDict):
+    """Metadatos sobre el procesamiento realizado."""
+    transcription_model: str
+    language: str
+    device: str
+    timestamp: str
+    diarization: Optional[bool]
+    diarization_model: Optional[str]
+
 class FinalResult(TypedDict):
     """Estructura final del resultado."""
     speakers: List[DiarizedChunk]  # Transcripción con hablantes
     chunks: List[TranscriptChunk]  # Fragmentos originales
     text: str  # Texto completo
+    metadata: Dict[str, Any]  # Metadatos, incluye source_info y processing
 
 @dataclass(frozen=True)
 class TranscriptionConfig:

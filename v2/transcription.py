@@ -3,7 +3,7 @@ Funciones para la transcripción de audio.
 """
 from typing import Dict, Any, cast
 
-from helpers import log_time, with_imports, with_progress_bar, logger
+from helpers import log_time, with_imports, with_progress_bar, logger, format_path
 from data_types import TranscriptionConfig, AudioData, TranscriptOutput
 
 @log_time
@@ -27,6 +27,10 @@ def transcribe_audio(
     """
     logger.info(f"Iniciando transcripción con modelo {config.model_name}")
     
+    # Mostrar información de la fuente si está disponible
+    if "source_info" in audio_data and audio_data["source_info"].get("path"):
+        logger.info(f"Fuente: {format_path(audio_data['source_info']['path'])}")
+    
     torch = dynamic_imports["torch"]
     transformers = dynamic_imports["transformers"]
     
@@ -45,7 +49,7 @@ def transcribe_audio(
         "automatic-speech-recognition",
         model=config.model_name,
         torch_dtype=torch.float16,
-        device="cuda:" + config.device_id if config.device_id != "mps" else "mps",
+        device="cuda:" + config.device_id if config.device_id not in ["mps", "cpu"] else config.device_id,
         model_kwargs=model_kwargs,
     )
     

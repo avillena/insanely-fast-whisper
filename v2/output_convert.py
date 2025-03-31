@@ -10,7 +10,7 @@ from typing import Optional, Union, List
 
 # Importaciones locales
 from formatters import OutputFormat, convert_output, output_format_type, create_speaker_map
-from helpers import log_time, logger
+from helpers import log_time, logger, format_path
 
 @log_time
 def parse_arguments():
@@ -115,11 +115,11 @@ def convert_transcript(
     if output_dir is None:
         # Por defecto, guardar en la misma carpeta que el archivo JSON original
         output_dir = input_path.parent
-        logger.info(f"Usando directorio de salida predeterminado: [bold cyan]{output_dir}[/]")
+        logger.info(f"Usando directorio de salida predeterminado: {format_path(str(output_dir))}")
     else:
         output_dir = Path(output_dir)
         if not output_dir.exists():
-            logger.info(f"Creando directorio de salida: [bold cyan]{output_dir}[/]")
+            logger.info(f"Creando directorio de salida: {format_path(str(output_dir))}")
             output_dir.mkdir(parents=True, exist_ok=True)
     
     # Determinar nombre del archivo de salida
@@ -147,12 +147,12 @@ def convert_transcript(
             new_path = output_dir / f"{output_stem}.{output_format}"
             result_path.rename(new_path)
             result_path = new_path
-            logger.info(f"Archivo renombrado a: [bold cyan]{result_path}[/]")
+            logger.info(f"Archivo renombrado a: {format_path(str(result_path))}")
         
         return result_path
     
     except Exception as e:
-        logger.error(f"[bold red]Error al convertir formato[/]: {str(e)}")
+        logger.error(f"[red]Error al convertir formato[/]: {str(e)}")
         raise
 
 @log_time
@@ -173,11 +173,11 @@ def main():
             speaker_names=args.speaker_names
         )
         
-        logger.info(f"[bold green]¡Conversión completada![/] Archivo guardado en: [bold cyan]{output_path}[/]")
+        logger.info(f"[green]¡Conversión completada![/] Archivo guardado en: {format_path(str(output_path))}")
         return 0
     
     except Exception as e:
-        logger.error(f"[bold red]Error durante la ejecución:[/] {str(e)}")
+        logger.error(f"[red]Error durante la ejecución:[/] {str(e)}")
         logger.debug("Detalles del error:", exc_info=True)
         return 1
 

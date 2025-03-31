@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Callable, Tuple
 
-from helpers import logger
+from helpers import logger, format_path
 
 class OutputFormat(Enum):
     """Formatos de salida soportados para transcripciones."""
@@ -240,5 +240,5 @@ def convert_output(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(output_content)
     
-    logger.info(f"[bold green]Archivo convertido[/] y guardado en: [bold cyan]{output_path}[/]")
+    logger.info(f"Archivo convertido y guardado en: {format_path(str(output_path))}")
     return output_path

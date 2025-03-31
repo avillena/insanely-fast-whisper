@@ -24,7 +24,8 @@ logging.basicConfig(
             rich_tracebacks=True,
             show_time=True,
             show_path=False,
-            enable_link_path=False
+            enable_link_path=False,
+            markup=True  # Habilitar interpretación de markup Rich
         )
     ]
 )
@@ -94,3 +95,8 @@ def with_progress_bar(description: str, func: Callable) -> Any:
     ) as progress:
         task_id = progress.add_task(f"[yellow]{description}", total=None)
         return func()
+
+# Función para formatear rutas de archivos de manera consistente
+def format_path(path):
+    """Aplica formato consistente a las rutas de archivos en logs."""
+    return f"[cyan]{path}[/]"

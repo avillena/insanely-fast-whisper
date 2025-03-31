@@ -4,7 +4,7 @@ Funciones para la diarización (identificación de hablantes) de audio.
 import sys
 from typing import Dict, Any, List, Tuple, cast
 
-from helpers import log_time, with_imports, with_progress_bar, logger
+from helpers import log_time, with_imports, with_progress_bar, logger, format_path
 from data_types import (
     TranscriptionConfig, AudioData, TranscriptOutput, 
     TranscriptChunk, DiarizedChunk
@@ -34,7 +34,9 @@ def load_diarization_pipeline(
         use_auth_token=config.hf_token,
     )
     
-    device = torch.device("mps" if config.device_id == "mps" else f"cuda:{config.device_id}")
+    device = torch.device("mps" if config.device_id == "mps" 
+                         else "cpu" if config.device_id == "cpu" 
+                         else f"cuda:{config.device_id}")
     pipeline.to(device)
     
     return pipeline
@@ -169,6 +171,10 @@ def diarize_audio(
         return []
     
     logger.info(f"Iniciando diarización con modelo {config.diarization_model}")
+    
+    # Mostrar información de la fuente si está disponible
+    if "source_info" in audio_data and audio_data["source_info"].get("path"):
+        logger.info(f"Fuente: {format_path(audio_data['source_info']['path'])}")
     
     def execute_diarization() -> Tuple[List[DiarizedChunk], List[Dict[str, Any]]]:
         # 1. Cargar pipeline
